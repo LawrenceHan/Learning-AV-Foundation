@@ -30,7 +30,7 @@
 
 @interface THPlayerController : NSObject
 
-@property (nonatomic, getter = isPlaying) BOOL playing;
+@property (nonatomic, readonly, getter = isPlaying) BOOL playing;
 @property (weak, nonatomic) id <THPlayerControllerDelegate> delegate;
 
 // Global methods

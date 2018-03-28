@@ -26,26 +26,126 @@
 #import "THPlayerController.h"
 #import <AVFoundation/AVFoundation.h>
 
+@interface THPlayerController ()
+@property (nonatomic, readwrite) BOOL playing;
+@property (nonatomic, strong) NSArray *players;
+
+@end
+
 @implementation THPlayerController
 
-- (void)play {
+- (instancetype)init {
+    if (self = [super init]) {
+        AVAudioPlayer *guitarPlayer = [self playerForFile:@"guitar"];
+        AVAudioPlayer *bassPlayer = [self playerForFile:@"bass"];
+        AVAudioPlayer *drumsPlayer = [self playerForFile:@"drums"];
+        _players = @[guitarPlayer, bassPlayer, drumsPlayer];
+        
+        NSNotificationCenter *nsnc = [NSNotificationCenter defaultCenter];
+        [nsnc addObserver:self selector:@selector(handleInterruption:) name:AVAudioSessionInterruptionNotification object:[AVAudioSession sharedInstance]];
+        
+        [nsnc addObserver:self selector:@selector(handleRouteChange:) name:AVAudioSessionRouteChangeNotification object:[AVAudioSession sharedInstance]];
+    }
+    return self;
+}
 
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)handleInterruption:(NSNotification *)notification {
+    NSDictionary *info = notification.userInfo;
+    AVAudioSessionInterruptionType type = [info[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+    
+    if (type == AVAudioSessionInterruptionTypeBegan) {
+        [self stop];
+        if (self.delegate) {
+            [self.delegate playbackStopped];
+        }
+    } else {
+        AVAudioSessionInterruptionOptions options = [info[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
+        if (options == AVAudioSessionInterruptionOptionShouldResume) {
+            [self play];
+            if (self.delegate) {
+                [self.delegate playbackBegan];
+            }
+        }
+    }
+}
+
+- (void)handleRouteChange:(NSNotification *)notification {
+    NSDictionary *info = notification.userInfo;
+    AVAudioSessionRouteChangeReason reason = [info[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
+    
+    if (reason == AVAudioSessionRouteChangeReasonOldDeviceUnavailable) {
+        AVAudioSessionRouteDescription *previousRoute = info[AVAudioSessionRouteChangePreviousRouteKey];
+        AVAudioSessionPortDescription *previousOutput = previousRoute.outputs[0];
+        NSString *portType = previousOutput.portType;
+        if ([portType isEqualToString:AVAudioSessionPortHeadphones]) {
+            [self stop];
+            [self.delegate playbackStopped];
+        }
+    }
+}
+
+- (AVAudioPlayer *)playerForFile:(NSString *)name {
+    NSURL *fileURL = [[NSBundle mainBundle] URLForResource:name withExtension:@"caf"];
+    NSError *error = nil;
+    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:fileURL error:&error];
+    
+    if (player) {
+        player.numberOfLoops = -1;
+        player.enableRate = YES;
+        [player prepareToPlay];
+    } else {
+        NSLog(@"Error creating player: %@", [error localizedDescription]);
+    }
+    
+    return player;
+}
+
+- (void)play {
+    if (!self.playing) {
+        NSTimeInterval delayTime = [self.players[0] deviceCurrentTime] + 0.01;
+        for (AVAudioPlayer *player in self.players) {
+            [player playAtTime:delayTime];
+        }
+        self.playing = YES;
+    }
 }
 
 - (void)stop {
-
+    if (self.playing) {
+        for (AVAudioPlayer *player in self.players) {
+            [player stop];
+            player.currentTime = 0.0f;
+        }
+        self.playing = NO;
+    }
 }
 
 - (void)adjustRate:(float)rate {
-
+    for (AVAudioPlayer *player in self.players) {
+        player.rate = rate;
+    }
 }
 
 - (void)adjustPan:(float)pan forPlayerAtIndex:(NSUInteger)index {
-
+    if ([self isValidIndex:index]) {
+        AVAudioPlayer *player = self.players[index];
+        player.pan = pan;
+    }
 }
 
 - (void)adjustVolume:(float)volume forPlayerAtIndex:(NSUInteger)index {
+    if ([self isValidIndex:index]) {
+        AVAudioPlayer *player = self.players[index];
+        player.volume = volume;
+    }
+}
 
+- (BOOL)isValidIndex:(NSUInteger)index {
+    return index == 0 || index < self.players.count;
 }
 
 @end

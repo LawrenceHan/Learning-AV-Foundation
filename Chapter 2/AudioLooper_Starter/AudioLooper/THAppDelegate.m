@@ -30,6 +30,15 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+    if (![session setCategory:AVAudioSessionCategoryPlayback error:&error]) {
+        NSLog(@"Category error: %@", [error localizedDescription]);
+    }
+    if (![session setActive:YES error:&error]) {
+        NSLog(@"Activation error: %@", [error localizedDescription]);
+    }
+    
     return YES;
 }
 
